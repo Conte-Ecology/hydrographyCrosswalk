@@ -21,7 +21,7 @@
 drop schema temp cascade;
 drop table cathuc12;
 
--- Create a separate schema for temporary files
+-- Keep temporary files separate
 CREATE SCHEMA temp;
 
 -- Create the catchment/huc table
@@ -34,7 +34,7 @@ CREATE TABLE data.cathuc12 (
 --select * from information_schema.table_constraints where table_name='cathuc12';
 
 
--- Index relevant HUC 12s by hydrologic region to save processing time
+-- Index relevant HUC 12s by hydrologic region to save processing effort
 with usa_hucs as (
   select *
   from gis.wbdhu12
@@ -45,6 +45,12 @@ from usa_hucs
 where
   CAST(huc12 AS numeric) < 070000000000
 ;
+
+-- Add primary key
+ALTER TABLE temp.hu12 ADD PRIMARY KEY (fid);
+
+-- Add geometry index
+CREATE INDEX hu12_geom_gist ON temp.hu12 USING gist(geom);
 
 
 
@@ -158,7 +164,8 @@ INSERT INTO cathuc12 (featureid, huc12) (
 --   These catchments, which have yet to be assigned a HUC 12 ID, are processed 
 --   in this section.
 
-
+-- Intersection Tables
+-- ===================
 -- Create a table of all of the remaining catchment/huc intersections
 with c as (
   select *
