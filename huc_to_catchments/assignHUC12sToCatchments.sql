@@ -99,23 +99,22 @@ ON ST_Intersects(h.geom_2163, t.geom_2163);
 
 
 
---create unique index intersections_featureid_huc12_idx on temp.intersect_lines (featureid, huc12);
---drop index temp.intersections_featureid_huc12_idx;
+create unique index intersections_featureid_huc12_idx on temp.intersect_lines (featureid, huc12);
 
 
 -- Table of the number of HUC12s of intersected by each featureid
-EXPLAIN SELECT featureid, COUNT(huc12) AS n_huc12 INTO temp.match_count_lines
+SELECT featureid, COUNT(huc12) AS n_huc12 INTO temp.match_count_lines
 FROM temp.intersect_lines
 GROUP BY featureid
 ORDER BY n_huc12 DESC;
 -- 98216.736ms
 
-
+create unique index match_count_lines_featureid_n_huc12_idx on temp.match_count_lines (featureid, n_huc12);
 
 -- Intermediate Flowlines
 -- ======================
 -- If a flowline has only 1 intersection it gets assigned that HUC12
-EXPLAIN INSERT INTO cathuc12 (featureid, huc12) (
+INSERT INTO cathuc12 (featureid, huc12) (
   SELECT featureid, huc12
   FROM temp.intersect_lines
   WHERE featureid in (
@@ -124,7 +123,7 @@ EXPLAIN INSERT INTO cathuc12 (featureid, huc12) (
     WHERE n_huc12 = 1
   )
 );
-
+--23222861.131ms (~64.5 hours)
 
 -- Headwater Flowlines
 -- ===================
@@ -132,7 +131,7 @@ EXPLAIN INSERT INTO cathuc12 (featureid, huc12) (
 --  field are considered headwaters. These flowlines get assigned to the HUC 
 --  that their downstream flowline (NextDownID) is assigned to.
 
-INSERT INTO cathuc12 (featureid, huc12) (
+EXPLAIN ANALYZE INSERT INTO cathuc12 (featureid, huc12) (
   SELECT featureid, huc12
   FROM temp.intersect_lines
   WHERE featureid NOT IN ( -- Haven't already been processed
@@ -141,12 +140,61 @@ INSERT INTO cathuc12 (featureid, huc12) (
   AND featureid IN ( -- Doesn't have multiple HUC assignments
     SELECT featureid
     FROM temp.match_count_lines
-    WHERE n_huc12 = 1)
+    WHERE n_huc12 = 1) -- this should be "> 1"?
   AND featureid NOT IN ( -- Qualify as headwater stream
     SELECT nextdownid 
     FROM gis.truncated_flowlines
   )
 );
+
+
+
+
+
+--INSERT INTO cathuc12 (featureid, huc12) (
+
+
+SELECT featureid, huc12
+FROM temp.intersect_lines
+WHERE featureid IN ( -- Doesn't have multiple HUC assignments
+
+EXPLAIN ANALYZE SELECT featureid
+FROM temp.match_count_lines
+WHERE n_huc12 > 1 -- this should be "> 1"?
+AND featureid NOT IN ( -- Qualify as headwater stream
+  SELECT nextdownid 
+  FROM gis.truncated_flowlines
+);
+
+
+SELECT featureid into temp.headwaters
+FROM temp.match_count_lines
+WHERE n_huc12 > 1
+AND featureid NOT IN ( -- Qualify as headwater stream
+  SELECT nextdownid 
+  FROM gis.truncated_flowlines
+);
+
+
+
+
+
+
+SELECT featureid, nextdownid
+LEFT JOIN gis.truncated_flowlines tf ON hw.featureid=tf.featureid
+
+
+LEFT JOIN temp.hu12 h ON ch.huc12=h.huc12
+
+
+
+
+
+
+
+
+
+
 
 
 -- Mouth Flowlines
