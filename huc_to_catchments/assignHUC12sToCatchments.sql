@@ -25,7 +25,7 @@ drop table cathuc12;
 CREATE SCHEMA temp;
 
 
-
+-- Add these restrictions on at the end of the script instead
 -- Create the catchment/huc table
 --CREATE TABLE data.cathuc12 (
 --  featureid  bigint,
@@ -45,19 +45,33 @@ CREATE TABLE data.cathuc12 (
 -- HUC 12 Pre-processing
 -- =====================
 -- Index relevant HUC 12s by hydrologic region to save processing effort
-WITH usa_hucs AS (
-  SELECT *
-  FROM gis.wbdhu12
-  WHERE huc12 NOT IN ('CANADA')
+WITH select_hucs AS( 
+  WITH usa_hucs AS (
+    SELECT *
+    FROM gis.wbdhu12
+    WHERE huc12 NOT IN ('CANADA')
+  )
+  SELECT * 
+  FROM usa_hucs
+  WHERE
+    CAST(huc12 AS numeric) < 070000000000
 )
-SELECT * INTO temp.hu12
-FROM usa_hucs
-WHERE
-  CAST(huc12 AS numeric) < 070000000000
+SELECT select_hucs.*, remove INTO temp.all_hu12
+  FROM 
+    select_hucs
+	LEFT JOIN data.ocean_huc12s oh ON select_hucs.huc12=oh.huc12
 ;
+  
+-- Remove ocean HUC12s
+SELECT * INTO temp.hu12
+  FROM 
+    temp.all_hu12 ah
+  WHERE remove IS NULL; 
 
 ALTER TABLE temp.hu12 ADD PRIMARY KEY (fid);
 CREATE INDEX hu12_geom_gist ON temp.hu12 USING gist(geom);
+
+DROP TABLE temp.all_hu12;
 
 
 -- Add transformed geometry columns
@@ -95,13 +109,6 @@ CREATE INDEX trunacted_flowlines_geom_2163_gist
 --                   Assign HUC 12s - Flowline Method
 -- ============================================================================
 
-drop table temp.intersect_cats, temp.intersect_lines, temp.match_count_cats, temp.match_count_lines, 
-     temp.non_intersect_lines, temp.non_intersect_cats, temp.catchments_left temp.free_cats, temp.headwaters;
-
-
-select count(*) from temp.match_count_lines where type_id = 'headwaters';
-
-
 -- Flowline Intersection Table
 -- ===========================
 -- Determine the number of HUC12 intersections for each flowline, including 
@@ -118,7 +125,6 @@ SELECT t.featureid, t.nextdownid, h.huc12
 
 CREATE UNIQUE INDEX intersections_featureid_huc12_idx 
   ON temp.intersect_lines (featureid, huc12);
-
 
 -- Flowline/huc non-intersections
 -- ------------------------------
@@ -149,7 +155,7 @@ SELECT featureid, nextdownid, COUNT(huc12) AS n_huc12
   
 -- Identify flowline types
 -- =======================  
-  
+
 -- Headwater flowlines
 -- -------------------
 -- ID lines that do not exist in the 'nextdownid' column
@@ -167,7 +173,7 @@ UPDATE temp.headwaters
   WHERE nextupid IS NULL
     AND nextdownid != -1;
 
--- add type_id column by left joining headwater table
+-- Add type_id column by left joining headwater table
 SELECT m.featureid, m.nextdownid, m.n_huc12, h.type_id INTO temp.match_count_lines
   FROM 
     temp.matches m
@@ -184,7 +190,6 @@ UPDATE temp.match_count_lines
   SET type_id = 'intermediate'
   WHERE n_huc12 = 1 
     AND type_id IS NULL;
- 
   
 -- Mouth flowlines
 -- ---------------
@@ -193,7 +198,8 @@ UPDATE temp.match_count_lines
   WHERE n_huc12 > 1 
     AND type_id IS NULL;  
 
--- Identify isolated flowlines
+-- Isolated flowlines
+-- ------------------
 UPDATE temp.match_count_lines 
   SET type_id = 'isolated'
   WHERE n_huc12 = 0 
@@ -210,14 +216,12 @@ INSERT INTO cathuc12 (featureid, huc12) (
 	  LEFT JOIN temp.match_count_lines mcl ON il.featureid=mcl.featureid
   WHERE type_id LIKE 'intermediate'
 ); 
--- 211196
 
 
 -- Mouth Flowlines
 -- ===============
 -- Flowlines that are at the mouth of a HUC12 and cross between 2 HUC 12s. 
 --  These get assigned based on the proportion of their length.
-
 INSERT INTO cathuc12 (featureid, huc12) (
   WITH t1 AS ( -- table of m featureids with intersection geometry
     WITH mo AS( --table of yet unassigned featureids with multiple intersections
@@ -243,8 +247,7 @@ INSERT INTO cathuc12 (featureid, huc12) (
   SELECT DISTINCT ON (featureid) featureid, huc12
     FROM   t1
     ORDER  BY featureid, fraction_length DESC
-); --8914
-
+);
 
 
 -- ============================================================================
@@ -267,7 +270,6 @@ OR featureid IN ( -- Flowlines do not intersect with HUC layer
   FROM temp.match_count_lines
   WHERE n_huc12 = 0 AND type_id LIKE 'isolated'
   );
---6728
 
 -- Add primary key + index
 ALTER TABLE temp.catchments_left ADD PRIMARY KEY (gid);
@@ -284,11 +286,6 @@ CREATE INDEX catchments_left_geom_2163_gist
   ON temp.catchments_left USING gist(geom_2163);
 
 
-
-
-
-
-
 -- Catchment Intersection Tables
 -- =============================
 -- Create a table of all of the remaining catchment/huc intersections
@@ -303,7 +300,6 @@ SELECT c.featureid, h.huc12
     ON ST_Intersects(h.geom_2163, c.geom_2163);
 
 CREATE UNIQUE INDEX intersect_cats_featureid_huc12_idx ON temp.intersect_cats (featureid, huc12);
-
 
 -- Catchment/huc non-intersections
 -- -------------------------------
@@ -342,14 +338,12 @@ INSERT INTO cathuc12 (featureid, huc12) (
 	LEFT JOIN temp.match_count_cats mcc ON ic.featureid=mcc.featureid
   WHERE n_huc12 = 1
 );
--- 4140
 
 
 -- Multi-Intersect Catchments
 -- ==========================
 -- Catchments that intersect multiple HUC12 polygons get assigned based on the
 --   greatest area of intersection
-
 INSERT INTO cathuc12 (featureid, huc12) (
   -- tg is a table of si featureids with intersection geometry
   WITH tg AS (
@@ -374,7 +368,6 @@ INSERT INTO cathuc12 (featureid, huc12) (
   FROM tg
   ORDER BY featureid, fraction_area DESC
 );
--- 2511
 
 
 -- Zero-Intersect Catchments
@@ -389,7 +382,6 @@ FROM
 where n_huc12 = 0;
 CREATE INDEX free_cats_geom_2163_gist ON temp.free_cats USING gist(geom_2163);
 
-
 -- Find the nearest HUC12s (within a reasonable distance of 5km) and select the nearest one.
 INSERT INTO cathuc12 (featureid, huc12) (
   WITH x AS (
@@ -402,14 +394,12 @@ INSERT INTO cathuc12 (featureid, huc12) (
   GROUP BY featureid, huc12, dist
   ORDER BY featureid, dist
 );
--- 77 ????
 
 
 --=========================================================================================
 --                                 HEADWATER ASSIGNMENT
 --=========================================================================================
 
--- HEADWATER ASSIGNMENT
 insert into cathuc12(featureid, huc12) (
   select mcl.featureid, ch.huc12 
   from 
@@ -424,21 +414,47 @@ insert into cathuc12(featureid, huc12) (
 
 
 --=========================================================================================
---                                 WORKSPACE
+--                                   QAQC
 --=========================================================================================
 
-psql -d sheds_new -c"COPY cathuc12 TO STDOUT WITH CSV HEADER" > /home/kyle/cathuc12.csv
+-- Export cat/huc relationship list
+psql -d sheds_new -c"COPY cathuc12 TO STDOUT WITH CSV HEADER" > /home/kyle/cathuc12_06022016.csv
 
 
-
-
--- export this to get a better look at where some issues might exist (manual check)
+-- Export headwaters with multiple huc intersections in order to 
+-- 	get a better look at where some issues might exist (manual check)
 select * into temp.hw_issues
   from temp.match_count_lines 
   where type_id like 'headwater' 
     and n_huc12 > 1;
 
-psql -d sheds_new -c"COPY temp.hw_issues TO STDOUT WITH CSV HEADER" > /home/kyle/hw_issues.csv
+	
+select * 
+  from temp.match_count_lines 
+  where featureid = 201117643;
+ 
+select * 
+  from temp.hw_issues 
+  where featureid = 201117643; 
+ 
+select * 
+  from temp.hw_issues 
+  where featureid = 201117643;  
+ 
+select distinct featureid into temp.test
+  from temp.hw_issues;
+
+ 
+  
+  where type_id like 'headwater' 
+    and n_huc12 > 1;	
+	
+	
+	
+	
+	
+-- Export 
+psql -d sheds_new -c"COPY temp.hw_issues TO STDOUT WITH CSV HEADER" > /home/kyle/hw_issues_06022016.csv
 
 
 
