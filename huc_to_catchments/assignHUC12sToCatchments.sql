@@ -427,7 +427,7 @@ INSERT INTO cathuc12
 --=========================================================================================
 
 -- Export cat/huc relationship list
-psql -d sheds_new -c"COPY cathuc12 TO STDOUT WITH CSV HEADER" > /home/kyle/cathuc12_06022016.csv
+psql -d sheds_new -c"COPY cathuc12 TO STDOUT WITH CSV HEADER" > /home/kyle/hydrography_crosswalk/huc_to_catchments/cathuc12_06232016.csv
 
 
 -- Export headwaters with multiple huc intersections in order to 
@@ -437,6 +437,15 @@ select * into temp.hw_issues
   where type_id like 'headwater' 
     and n_huc12 > 1;
 
+-- Export 
+psql -d sheds_new -c"COPY temp.hw_issues TO STDOUT WITH CSV HEADER" > /home/kyle/hydrography_crosswalk/huc_to_catchments/hw_issues_06232016.csv
+	
+	
+	
+	
+	
+	
+	
 	
 select * 
   from temp.match_count_lines 
@@ -462,8 +471,7 @@ select distinct featureid into temp.test
 	
 	
 	
--- Export 
-psql -d sheds_new -c"COPY temp.hw_issues TO STDOUT WITH CSV HEADER" > /home/kyle/hw_issues_06022016.csv
+
 
 
 
