@@ -408,6 +408,15 @@ insert into cathuc12(featureid, huc12) (
   where type_id LIKE 'headwater'
 );
 
+--=========================================================================================
+--                                   MANUAL ASSIGNMENT 
+--=========================================================================================
+
+DELETE FROM cathuc12 
+  WHERE featureid in (select featureid from data.manual_huc12s);
+
+INSERT INTO cathuc12
+  select * from data.manual_huc12s;	 
 
 -- END OF ASSIGNMENT SCRIPT
 

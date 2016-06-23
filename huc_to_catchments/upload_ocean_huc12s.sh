@@ -3,7 +3,7 @@
 # csv file must have 1 column: huc12
 
 # usage: $ ./upload_ocean_huc12s.sh <db name> <path to huc12 list CSV file>
-# example: $ ./upload_ocean_huc12s.sh sheds_new /home/kyle/huccat/tables/ocean_huc12s.csv
+# example: $ ./upload_ocean_huc12s.sh sheds_new /home/kyle/hydrography_crosswalk/huc_to_catchments/tables/ocean_huc12s.csv
 
 
 set -eu
