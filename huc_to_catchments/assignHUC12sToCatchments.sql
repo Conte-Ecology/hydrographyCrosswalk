@@ -7,33 +7,15 @@
 --                  are assigned to. 
 -- 3. Mouths:       Flowlines that are at the mouth of a HUC12 and cross between 2 HUC 12s. These get 
 --                  assigned based on the proportion of their length.
-
--- Test case
--- =========
---temp.trunc_hc = gis.truncated_flowlines
---temp.cat_hc = gis.catchments
+-- 4. Isolated:     Flowlines that do not intersect any HUC12 layers. There are just a few of these.
 
 
--- Prep
--- ====
+-- ============================================================================
+--                                SETUP
+-- ============================================================================
 
--- Drop previous iteration leftovers
-drop schema temp cascade;
-drop table cathuc12;
-
--- Keep temporary files separate
+-- Temporary schema
 CREATE SCHEMA temp;
-
-
--- Add these restrictions on at the end of the script instead
--- Create the catchment/huc table
---CREATE TABLE data.cathuc12 (
---  featureid  bigint,
---             REFERENCES catchments (featureid)
---			   UNIQUE,
---  huc12      varchar(20)
---);
-
 
 -- Create the catchment/huc table (add restrictions at end)
 CREATE TABLE data.cathuc12 (
@@ -44,12 +26,12 @@ CREATE TABLE data.cathuc12 (
 
 -- HUC 12 Pre-processing
 -- =====================
--- Index relevant HUC 12s by hydrologic region to save processing effort
+-- Index relevant HUC12s by hydrologic region to save processing effort
 WITH select_hucs AS( 
   WITH usa_hucs AS (
     SELECT *
     FROM gis.wbdhu12
-    WHERE huc12 NOT IN ('CANADA')
+    WHERE huc12 NOT IN ('CANADA', ' ')
   )
   SELECT * 
   FROM usa_hucs
@@ -63,6 +45,7 @@ SELECT select_hucs.*, remove INTO temp.all_hu12
 ;
   
 -- Remove ocean HUC12s
+-- -------------------
 SELECT * INTO temp.hu12
   FROM 
     temp.all_hu12 ah
@@ -76,23 +59,26 @@ DROP TABLE temp.all_hu12;
 
 -- Add transformed geometry columns
 -- ================================
--- Allows for preservation of geometry indexes in PostGIS functions requiring 
---     equal area projections. Also saves time from transforming every time.
+-- Allow for preservation of geometry indexes in PostGIS functions requiring 
+--     equal area projections.
 
 -- HUC 12 
 -- ------
 ALTER TABLE temp.hu12 
   ADD COLUMN geom_2163 geometry(Geometry,2163);
+  
 UPDATE temp.hu12 
   SET geom_2163 = ST_Transform(geom, 2163)
   FROM spatial_ref_sys 
   WHERE ST_SRID(geom) = srid;
+  
 CREATE INDEX hu12_geom_2163_gist ON temp.hu12 USING gist(geom_2163);
 
 -- Flowlines
 -- ---------
 ALTER TABLE gis.truncated_flowlines 
   ADD COLUMN geom_2163 geometry(Geometry,2163);
+  
 UPDATE gis.truncated_flowlines 
   SET geom_2163 = ST_Transform(geom, 2163)
   FROM spatial_ref_sys 
@@ -100,9 +86,6 @@ UPDATE gis.truncated_flowlines
   
 CREATE INDEX trunacted_flowlines_geom_2163_gist 
   ON gis.truncated_flowlines USING gist(geom_2163);
-
---SELECT Find_SRID('temp', 'hu12', 'geom_2163');
---SELECT Find_SRID('gis', 'truncated_flowlines', 'geom_2163');
 
 
 -- ============================================================================
@@ -116,12 +99,12 @@ CREATE INDEX trunacted_flowlines_geom_2163_gist
 
 -- Flowline/huc intersections
 -- --------------------------
-SELECT t.featureid, t.nextdownid, h.huc12 
+SELECT tf.featureid, tf.nextdownid, h.huc12 
   INTO temp.intersect_lines
   FROM 
-    gis.truncated_flowlines AS t
+    gis.truncated_flowlines AS tf
     INNER JOIN temp.hu12 AS h
-    ON ST_Intersects(h.geom_2163, t.geom_2163);
+    ON ST_Intersects(h.geom_2163, tf.geom_2163);
 
 CREATE UNIQUE INDEX intersections_featureid_huc12_idx 
   ON temp.intersect_lines (featureid, huc12);
@@ -137,7 +120,8 @@ SELECT tf.featureid, tf.nextdownid
 
 ALTER TABLE temp.non_intersect_lines 
   ADD COLUMN huc12 VARCHAR(20);
-  
+
+-- Add in non-intersecting lines
 INSERT INTO temp.intersect_lines 
   SELECT featureid, nextdownid, huc12
   FROM temp.non_intersect_lines;
@@ -159,13 +143,15 @@ SELECT featureid, nextdownid, COUNT(huc12) AS n_huc12
 -- Headwater flowlines
 -- -------------------
 -- ID lines that do not exist in the 'nextdownid' column
-SELECT DISTINCT ON (tf1.featureid) tf1.featureid, tf1.nextdownid, tf2.featureid AS nextupid 
+SELECT DISTINCT ON (tf1.featureid) tf1.featureid, tf1.nextdownid, tf2.featureid
+  AS nextupid 
   INTO temp.headwaters
   FROM 
     truncated_flowlines tf1
     LEFT JOIN truncated_flowlines tf2 ON tf1.featureid = tf2.nextdownid
   ORDER BY tf1.featureid DESC;
 
+-- Add type identifier column
 ALTER TABLE temp.headwaters ADD COLUMN type_id VARCHAR(12);
 
 UPDATE temp.headwaters 
@@ -173,14 +159,19 @@ UPDATE temp.headwaters
   WHERE nextupid IS NULL
     AND nextdownid != -1;
 
--- Add type_id column by left joining headwater table
-SELECT m.featureid, m.nextdownid, m.n_huc12, h.type_id INTO temp.match_count_lines
+-- Add type_id column by left joining headwater table (renames table)
+SELECT m.featureid, m.nextdownid, m.n_huc12, h.type_id 
+  INTO temp.match_count_lines
   FROM 
     temp.matches m
 	LEFT JOIN temp.headwaters h ON m.featureid=h.featureid;
 
-CREATE UNIQUE INDEX match_count_lines_featureid_n_huc12_idx ON temp.match_count_lines (featureid, n_huc12);
-CREATE INDEX match_count_lines_nextdownid_idx ON temp.match_count_lines (nextdownid);
+-- Add indexes for searching
+CREATE UNIQUE INDEX match_count_lines_featureid_n_huc12_idx 
+  ON temp.match_count_lines (featureid, n_huc12);
+  
+CREATE INDEX match_count_lines_nextdownid_idx 
+  ON temp.match_count_lines (nextdownid);
 	
 DROP TABLE temp.matches;
 	
@@ -227,7 +218,7 @@ INSERT INTO cathuc12 (featureid, huc12) (
     WITH mo AS( --table of yet unassigned featureids with multiple intersections
       SELECT featureid, huc12
         FROM temp.intersect_lines
-        WHERE featureid IN ( -- <-- make this a left join to run faster
+        WHERE featureid IN (
           SELECT featureid
             FROM temp.match_count_lines
             WHERE type_id LIKE 'mouth'
@@ -250,13 +241,12 @@ INSERT INTO cathuc12 (featureid, huc12) (
 );
 
 
--- ============================================================================
+--=============================================================================
 --                   Assign HUC 12s - Catchment Method
 -- ============================================================================
--- Some catchments do not have associated streams in the truncated_flowlines layer. 
---   These catchments, which have yet to be assigned a HUC 12 ID, are processed 
---   in this section.
-
+-- Some catchments do not have associated streams in the truncated_flowlines 
+--   layer. These catchments, which have yet to be assigned a HUC 12 ID, are 
+--   processed in this section.
 
 -- Table Prep
 -- ==========
@@ -292,12 +282,12 @@ CREATE INDEX catchments_left_geom_2163_gist
 
 -- Catchment/huc intersections
 -- ---------------------------
-SELECT c.featureid, h.huc12 
+SELECT cl.featureid, h.huc12 
   INTO temp.intersect_cats
   FROM 
-    temp.catchments_left AS c
+    temp.catchments_left AS cl
     INNER JOIN temp.hu12 AS h
-    ON ST_Intersects(h.geom_2163, c.geom_2163);
+    ON ST_Intersects(h.geom_2163, cl.geom_2163);
 
 CREATE UNIQUE INDEX intersect_cats_featureid_huc12_idx ON temp.intersect_cats (featureid, huc12);
 
@@ -396,9 +386,9 @@ INSERT INTO cathuc12 (featureid, huc12) (
 );
 
 
---=========================================================================================
---                                 HEADWATER ASSIGNMENT
---=========================================================================================
+--=============================================================================
+--                             HEADWATER ASSIGNMENT
+--=============================================================================
 
 insert into cathuc12(featureid, huc12) (
   select mcl.featureid, ch.huc12 
@@ -408,231 +398,33 @@ insert into cathuc12(featureid, huc12) (
   where type_id LIKE 'headwater'
 );
 
---=========================================================================================
---                                   MANUAL ASSIGNMENT 
---=========================================================================================
-
+--=============================================================================
+--                           MANUAL ASSIGNMENT 
+--=============================================================================
+-- Insert the list of manually assigned huc12s
 DELETE FROM cathuc12 
-  WHERE featureid in (select featureid from data.manual_huc12s);
+  WHERE featureid IN (SELECT featureid FROM data.manual_huc12s);
 
 INSERT INTO cathuc12
-  select * from data.manual_huc12s;	 
-
--- END OF ASSIGNMENT SCRIPT
+  SELECT * FROM data.manual_huc12s;	 
 
 
+--=============================================================================
+--                      TABLE CONSTRAINTS & CLEANUP
+--=============================================================================
 
---=========================================================================================
---                                   QAQC
---=========================================================================================
-
--- Export cat/huc relationship list
-psql -d sheds_new -c"COPY cathuc12 TO STDOUT WITH CSV HEADER" > /home/kyle/hydrography_crosswalk/huc_to_catchments/cathuc12_06232016.csv
-
-
--- Export headwaters with multiple huc intersections in order to 
--- 	get a better look at where some issues might exist (manual check)
-select * into temp.hw_issues
-  from temp.match_count_lines 
-  where type_id like 'headwater' 
-    and n_huc12 > 1;
-
--- Export 
-psql -d sheds_new -c"COPY temp.hw_issues TO STDOUT WITH CSV HEADER" > /home/kyle/hydrography_crosswalk/huc_to_catchments/hw_issues_06232016.csv
-	
-	
-	
-	
-	
-	
-	
-	
-select * 
-  from temp.match_count_lines 
-  where featureid = 201117643;
- 
-select * 
-  from temp.hw_issues 
-  where featureid = 201117643; 
- 
-select * 
-  from temp.hw_issues 
-  where featureid = 201117643;  
- 
-select distinct featureid into temp.test
-  from temp.hw_issues;
-
- 
-  
-  where type_id like 'headwater' 
-    and n_huc12 > 1;	
-	
-	
-	
-	
-	
-
-
-
-
-
-
--- clean out short steps
-
-drop table temp.catchments_left, temp.free_cats, temp.headwaters, temp.match_count_cats, temp.match_count_lines, temp.non_intersect_cats, cathuc12;
-
-
--- ===========================================================
---                          ERRORS
--- ===========================================================
-select * 
-from cathuc12
-where featureid = 201443949; -- huc12 = 0
-
-select * 
-from cathuc12
-where featureid = 2011177312; --huc12 is null
-
-
-
-select * 
-from cathuc12
-where huc12 is null;
-
-
-
-
-
-
-select *
-from 
-  cathuc12 ch
-  LEFT JOIN temp.match_count_lines mcl ON mcl.featureid=ch.featureid
-where huc12 is null;
-
-headwater and nextdownid = -1
-
-
-
-
-  CAST(huc12 AS numeric) < 010000000000
+-- Assign foreign key
+ALTER TABLE data.cathuc12 
+  ADD CONSTRAINT catchment_huc12_featureid_fkey 
+  FOREIGN KEY (featureid) 
+  REFERENCES catchments (featureid)
 ;
 
+-- Indexes on HUC12s and HUC8s
+CREATE INDEX catchment_huc12_huc_idx ON data.cathuc12 (huc12);
+CREATE INDEX catchment_huc8_huc_idx ON data.cathuc12 (substr(huc12::text, 1, 8));
 
+-- Drop temporary schema
+DROP SCHEMA temp CASCADE;
 
-
-
-
-
-
-
-
-
-
-
-
-psql -d sheds_new -c"COPY cathuc12 TO '/home/kyle/cathuc12.csv' DELIMITER ',' CSV HEADER;
-
-
-
-
-
-
-
-
-
-
--- Headwater Flowlines
--- ===================
--- Flowlines that intersect multiple HUC12s and do not exist in the NextDownID 
---  field are considered headwaters. These flowlines get assigned to the HUC 
---  that their downstream flowline (NextDownID) is assigned to.
-
-EXPLAIN ANALYZE INSERT INTO cathuc12 (featureid, huc12) (
-  SELECT featureid, huc12
-  FROM temp.intersect_lines
-  WHERE featureid NOT IN ( -- Haven't already been processed
-    SELECT featureid 
-	FROM cathuc12)
-  AND featureid IN ( -- Doesn't have multiple HUC assignments
-    SELECT featureid
-    FROM temp.match_count_lines
-    WHERE n_huc12 = 1) -- this should be "> 1"?
-  AND featureid NOT IN ( -- Qualify as headwater stream
-    SELECT nextdownid 
-    FROM gis.truncated_flowlines
-  )
-);
-
-
-
-
---INSERT INTO cathuc12 (featureid, huc12) (
-
-
-SELECT featureid, huc12
-FROM temp.intersect_lines
-WHERE featureid IN () -- Doesn't have multiple HUC assignments
-
-EXPLAIN ANALYZE SELECT featureid
-FROM temp.match_count_lines
-WHERE n_huc12 > 1 -- this should be "> 1"?
-AND featureid NOT IN ( -- Qualify as headwater stream
-  SELECT nextdownid 
-  FROM gis.truncated_flowlines
-);
-
-
-SELECT featureid into temp.headwaters
-FROM temp.match_count_lines
-WHERE n_huc12 > 1
-AND featureid NOT IN ( -- Qualify as headwater stream
-  SELECT nextdownid 
-  FROM gis.truncated_flowlines
-);
-
-
-select * into temp.jointest
-from temp.headwaters;
-
-
-
-SELECT hw.featureid, nextdownid into temp.test
-  from temp.headwaters hw
-  LEFT JOIN gis.truncated_flowlines tf ON hw.featureid=tf.featureid
-
-
--- Assign headwater streams to their nextdownid's HUC12
-with y as (
-  SELECT hw.featureid, nextdownid
-  from temp.headwaters hw
-  LEFT JOIN gis.truncated_flowlines tf ON hw.featureid=tf.featureid
-)
-select y.featureid, y.nextdownid, c.huc12 into temp.test
-from y
-left join cathuc12 c ON y.nextdownid=c.featureid;
-
-  
-select nextdownid
-
-
-LEFT JOIN temp.hu12 h ON ch.huc12=h.huc12
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+-- END OF ASSIGNMENT SCRIPT
