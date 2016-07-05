@@ -84,16 +84,21 @@ psql -d $DB -c "
 
 				-- Flowlines
 				-- ---------
-				ALTER TABLE gis.truncated_flowlines 
+				SELECT * INTO temp.truncated_flowlines
+				  FROM 
+					gis.truncated_flowlines;				
+				
+				
+				ALTER TABLE temp.truncated_flowlines 
 				  ADD COLUMN geom_2163 geometry(Geometry,2163);
 				  
-				UPDATE gis.truncated_flowlines 
+				UPDATE temp.truncated_flowlines 
 				  SET geom_2163 = ST_Transform(geom, 2163)
 				  FROM spatial_ref_sys 
 				  WHERE ST_SRID(geom) = srid;
 				  
 				CREATE INDEX trunacted_flowlines_geom_2163_gist 
-				  ON gis.truncated_flowlines USING gist(geom_2163);
+				  ON temp.truncated_flowlines USING gist(geom_2163);
 
 
 				-- ============================================================================
@@ -110,7 +115,7 @@ psql -d $DB -c "
 				SELECT tf.featureid, tf.nextdownid, h.huc12 
 				  INTO temp.intersect_lines
 				  FROM 
-					gis.truncated_flowlines AS tf
+					temp.truncated_flowlines AS tf
 					INNER JOIN temp.hu12 AS h
 					ON ST_Intersects(h.geom_2163, tf.geom_2163);
 
@@ -122,7 +127,7 @@ psql -d $DB -c "
 				SELECT tf.featureid, tf.nextdownid 
 				  INTO temp.non_intersect_lines
 				  FROM 
-					gis.truncated_flowlines tf
+					temp.truncated_flowlines tf
 					LEFT JOIN temp.intersect_lines il ON tf.featureid=il.featureid
 				  WHERE il.featureid IS NULL;
 
@@ -241,7 +246,7 @@ psql -d $DB -c "
 					FROM 
 					  mo
 					  LEFT JOIN temp.hu12 h ON mo.huc12=h.huc12 -- huc12 ids
-					  LEFT JOIN gis.truncated_flowlines t ON mo.featureid=t.featureid -- flowline ids
+					  LEFT JOIN temp.truncated_flowlines t ON mo.featureid=t.featureid -- flowline ids
 				  )
 				  SELECT DISTINCT ON (featureid) featureid, huc12
 					FROM   t1
