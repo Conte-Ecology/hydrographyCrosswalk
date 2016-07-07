@@ -1,8 +1,6 @@
 NHDHRDV2 HUC12 Creation
 =======================
 
-In Progress...
-
 
 # Description
 The [NHDHRDV2](http://conte-ecology.github.io/shedsGisData/) catchments are 
