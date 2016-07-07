@@ -72,7 +72,7 @@ process using the `upload_manual_huc12s` script. Example call:
 
 ### Output 
 The two tables are written to the database in the "data" schema as 
-"data.ocean_huc12s" and "data.manual_huc12s".
+`ocean_huc12s` and `manual_huc12s`.
 
 
 ## 2) Assign HUC12s to Catchments
@@ -80,19 +80,18 @@ The two tables are written to the database in the "data" schema as
 ### Description
 The script uses the spatial relationships of the catchments and their 
 respective flowlines to the HUC12 layer as well as the network structure to 
-assign HUC12 values to the catchment featureids.
+assign HUC12 values to the catchment featureids. Any HUC12s outside of the 
+NHDHRDV2 range along with the pre-sepcified ocean HUC12s are excluded before 
+processing to improve run time and prevent false assignments. As a general 
+rule, any featureid marked as a headwater stream (i.e. nothing flowing into it) 
+is automatically assigned to the same HUC12 as the featureid it flows into, 
+overriding all other spatial relationships. The remaining hydrography elements 
+are processed by two methods:
 
-The script first eliminates from processing the HUC12s outside of the NHDHRDV2 
-range along with the pre-sepcified ocean HUC12s.
-
-As a general rule, any featureids marked as a headwater stream (i.e. nothing 
-flowing into it) is automatically assigned to the same HUC12 as the featureid 
-it flows into, overriding all other spatial relationships. The remaining 
-hydrography elements are processed by two methods:
-
-The first method of HUC12 assignment uses the `truncated_flowlines` table in 
-the database. This layer is intersected with the HUC12 layer (`wbdhu12`) and 
-the following rules are followed to define HUC12 assigment:
+#### Flowline-based Method
+The first method of HUC12 assignment uses the `gis.truncated_flowlines` table 
+in the database. This layer is intersected with the HUC12 layer (`gis.wbdhu12`) 
+and the following rules are followed to define HUC12 assigment:
 
 1. Any flowline with a single HUC12 intersection is assigned to that HUC12
 
@@ -102,11 +101,13 @@ which the greatest portion of their length lies.
 3. Flowlines with no HUC12 intersections are processed in the next section with 
 the catchment-based method
 
+#### Catchment-based Method
 The second method of HUC12 assignment uses the `catchments` table in the 
 database. All featureids not assigned in the previous section are addressed in 
-this section. Catchments without related `truncated_flowlines` (e.g. coastal 
-catchments), as well as those from the previous section that do not intersect 
-any HUC12 are processed by this method. 
+this section. These instances include catchments without related 
+`truncated_flowlines` (e.g. coastal catchments) as well as those that do not 
+intersect any HUC12 are processed by this method. Similar rules to the previous 
+method are followed:
 
 1. Any catchment with a single HUC12 intersection is assigned to that HUC12. 
 
@@ -123,11 +124,11 @@ The `assign_huc12s_to_catchments.sh` script is called by either navigating to
 the directory or specifying the entire filepath. The script takes the filepath 
 to the table as input. Example call:
 
-`./assign_huc12s_to_catchments.sh sheds`
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`./assign_huc12s_to_catchments.sh sheds`
 
 
 ### Output
-The `data.cathuc12` table is written to the "data" schema in the database.
+The `cathuc12` table is written to the "data" schema in the database.
 
 
 # Contact Info
