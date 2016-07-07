@@ -60,12 +60,14 @@ To upload the `ocean_huc12s.csv` table, the `upload_ocean_huc12s` script is
 called by either navigating to the directory or specifying the entire filepath. 
 The script takes the filepath to the table as input. Example call:
 
-  `./upload_ocean_huc12s.sh sheds /home/data/tables/ocean_huc12s.csv`
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+`./upload_ocean_huc12s.sh sheds /home/data/tables/ocean_huc12s.csv`
 
 The upload of the `manual_huc12s.csv` table is the same as the ocean HUC12s 
 process using the `upload_manual_huc12s` script. Example call:
 
-  `./upload_manual_huc12s.sh sheds /home/data/tables/manual_huc12s.csv`
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+`./upload_manual_huc12s.sh sheds /home/data/tables/manual_huc12s.csv`
 
 
 ### Output 
