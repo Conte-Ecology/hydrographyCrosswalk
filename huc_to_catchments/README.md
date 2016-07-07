@@ -54,11 +54,10 @@ Both tables are currently maintained on felek in the
 
 ### Steps to execute
 Both of the tables are uploaded to the "data" schema of the database to be 
-referenced by the HUC12 assignment process. 
-
-To upload the `ocean_huc12s.csv` table, the `upload_ocean_huc12s` script is 
-called by either navigating to the directory or specifying the entire filepath. 
-The script takes the filepath to the table as input. Example call:
+referenced by the HUC12 assignment process. To upload the `ocean_huc12s.csv` 
+table, the `upload_ocean_huc12s` script is called by either navigating to the 
+directory or specifying the entire filepath. The script takes the filepath to 
+the table as input. Example call:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
 `./upload_ocean_huc12s.sh sheds /home/data/tables/ocean_huc12s.csv`
@@ -106,8 +105,7 @@ The second method of HUC12 assignment uses the `catchments` table in the
 database. All featureids not assigned in the previous section are addressed in 
 this section. These instances include catchments without related 
 `truncated_flowlines` (e.g. coastal catchments) as well as those that do not 
-intersect any HUC12 are processed by this method. Similar rules to the previous 
-method are followed:
+intersect any HUC12. Similar rules to the previous method are followed:
 
 1. Any catchment with a single HUC12 intersection is assigned to that HUC12. 
 
