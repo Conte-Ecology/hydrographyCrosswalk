@@ -14,7 +14,7 @@ by common leading digits (e.g.). For example, the HUC12s of 010802030402 and
 Deerfield River.
 
 Initial assignment of HUC12s to catchments was done using a spatial overlay 
-method, assigning catchments to the HUC12 based on the largest area of overlap.  
+method, assigning catchments to the HUC12 based on the largest area of overlap. 
 This method produced errors as a result of discrepancies between the high 
 resolution hydrography and the NHD layers as well as shoreline definition in 
 the NHDHRDv2 layers. The methods outlined here area used to address these 
