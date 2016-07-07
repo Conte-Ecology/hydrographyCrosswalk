@@ -17,8 +17,8 @@ Initial assignment of HUC12s to catchments was done using a spatial overlay
 method, assigning catchments to the HUC12 based on the largest area of overlap. 
 This method produced errors as a result of discrepancies between the high 
 resolution hydrography and the NHD layers as well as shoreline definition in 
-the NHDHRDv2 layers. The methods outlined here area used to address these 
-errors and more accurately group catchments into HUC12 classifications.
+the NHDHRDv2 layers. The methods outlined here are used to address these 
+errors and to group catchments into HUC12 classifications with better accuracy.
 
 
 # Data Sources
