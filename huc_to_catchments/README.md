@@ -22,10 +22,9 @@ errors and more accurately group catchments into HUC12 classifications.
 
 
 # Data Sources
-The source HUC12 layer is downloaded from the 
-[Watershed Boundary Dataset](http://nhd.usgs.gov/wbd.html). 
+HUC12 layer: [Watershed Boundary Dataset](http://nhd.usgs.gov/wbd.html). 
 
-The catchments are from the [NHDHRDV2](http://conte-ecology.github.io/shedsGisData/)
+Catchments layer: [NHDHRDV2](http://conte-ecology.github.io/shedsGisData/)
 
 
 # Processing
@@ -61,12 +60,12 @@ To upload the `ocean_huc12s.csv` table, the `upload_ocean_huc12s` script is
 called by either navigating to the directory or specifying the entire filepath. 
 The script takes the filepath to the table as input. Example call:
 
-`./upload_ocean_huc12s.sh sheds /home/data/tables/ocean_huc12s.csv`
+  `./upload_ocean_huc12s.sh sheds /home/data/tables/ocean_huc12s.csv`
 
 The upload of the `manual_huc12s.csv` table is the same as the ocean HUC12s 
 process using the `upload_manual_huc12s` script. Example call:
 
-`./upload_manual_huc12s.sh sheds /home/data/tables/manual_huc12s.csv`
+  `./upload_manual_huc12s.sh sheds /home/data/tables/manual_huc12s.csv`
 
 
 ### Output 
