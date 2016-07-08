@@ -117,8 +117,8 @@ nearest to. (Currently there are only a few cases of this scenario.)
 ### Steps to execute
 
 The `assign_huc12s_to_catchments.sh` script is called by either navigating to 
-the directory or specifying the entire filepath. The script takes the filepath 
-to the table as input. Example call:
+the directory or specifying the entire filepath. The script takes the name of 
+the database as input. Example call:
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`./assign_huc12s_to_catchments.sh sheds`
 
